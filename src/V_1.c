@@ -12,7 +12,7 @@
 //-------- VARIABLES GLOBALES --------//
 Uint16_t ADC_CLKDIV = 1000; //selector de rate para el adc
 Uint32_t PRESCALE   =   399; //prescaler para 1ms
-Uint16_t BUFFER_DATOS_ADC[30]; //SE  DEBE TRATAR LOS DATOS ANTES DE GUARDARLOS
+Uint32_t BUFFER_DATOS_ADC[30]; //Para solicitar estos datos, deben ser tratados
 Uint32_t MATCH0_VALUE = 500; //0,5 segundos
 
 //-------- FUNCIONES --------//
@@ -70,7 +70,7 @@ void config_DAC(){
 void config_ADC(){
     ADC_Init(LPC_ADC, ADC_CLKDIV);
 	ADC_ChannelCmd(LPC_ADC, ADC_CHANNEL_0, ENABLE);
-//	ADC_IntConfig(LPC_ADC, ADC_ADINTEN0, ENABLE);
+	ADC_IntConfig(LPC_ADC, ADC_ADINTEN0, ENABLE);
     ADC_BurstCmd(LPC_ADC, ENABLE);
 	NVIC_EnableIRQ(ADC_IRQn);
 }
@@ -119,6 +119,16 @@ void config_UART(){
 	uart_cfg.Stopbits  = UART_STOPBIT_1;
 	UART_Init(LPC_UART0, &uart_cfg);
 
+	//Configuracion FIFO para trabajr con DMA
+	UART_FIFO_CFG_Type UARTFIFOConfigStruct;
+	UARTFIFOConfigStruct.FIFO_DMAMode		=	ENABLE;
+	UARTFIFOConfigStruct.FIFO_Level			=	UART_FIFO_TRGLEV0;
+	UARTFIFOConfigStruct.FIFO_ResetRxBuf	=	ENABLE;
+	UARTFIFOConfigStruct.FIFO_ResetTxBuf	=	ENABLE;
+	UART_FIFOConfigStructInit(&UARTFIFOConfigStruct);
+	UART_FIFOConfig(LPC_UART0, &UARTFIFOConfigStruct);				// Inicializa FIFO
+	UART_TxCmd(LPC_UART0, ENABLE);									// Habilita transmision
+
 }
 void config_TIMER0(){
 	TIM_TIMERCFG_Type timer0_cfg;
@@ -151,28 +161,125 @@ void ADC_IRQHandler(){
 	ADC_ChannelCmd(LPC_ADC, ADC_CHANNEL_0, DISABLE);
 }
 
-	
+// ----- FUNCIONES VARIAS -----//	
+//Funcion encargada de extraer los 12 bits con el resultado de la conversion
+//desde el buffer, indice "pos"
+uint16_t extract_ADC_result_from_Buffer(uint8_t pos){
+	// Extract bits 4 to 15 from the ADC value
+	return (uint16_t)((BUFFER_DATOS_ADC[pos] >> 4) & 0xFFF); //Si tira error, cambiar por ADC_ChannelGetData(&LPC_ADC);
+}
 
+//Funcion de tabla, para traducir conversion
+uint16_t tabla_conversion(uint16_t valor){ //SE DEBE VER COMO ES LA CONVERSION DEL SENSOR A VOLTAJE
+	if(valor < 1000){
+		return 0;
+	}
+	else if(valor < 2000){
+		return 1;
+	}
+	else if(valor < 3000){
+		return 2;
+	}
+	else if(valor < 4000){
+		return 3;
+	}
+	else if(valor < 5000){
+		return 4;
+	}
+	else if(valor < 6000){
+		return 5;
+	}
+	else if(valor < 7000){
+		return 6;
+	}
+	else if(valor < 8000){
+		return 7;
+	}
+	else if(valor < 9000){
+		return 8;
+	}
+	else if(valor < 10000){
+		return 9;
+	}
+	else if(valor < 11000){
+		return 10;
+	}
+	else if(valor < 12000){
+		return 11;
+	}
+	else if(valor < 13000){
+		return 12;
+	}
+	else if(valor < 14000){
+		return 13;
+	}
+	else if(valor < 15000){
+		return 14;
+	}
+	else if(valor < 16000){
+		return 15;
+	}
+	else if(valor < 17000){
+		return 16;
+	}
+	else if(valor < 18000){
+		return 17;
+	}
+	else if(valor < 19000){
+		return 18;
+	}
+	else if(valor < 20000){
+		return 19;
+	}
+	else if(valor < 21000){
+		return 20;
+	}
+	else if(valor < 22000){
+		return 21;
+	}
+	else if(valor < 23000){
+		return 22;
+	}
+	else if(valor < 24000){
+		return 23;
+	}
+	else if(valor < 25000){
+		return 24;
+	}
+	else if(valor < 26000){
+		return 25;
+	}
+	else if(valor < 27000){
+		return 26;
+	}
+	else if(valor < 28000){
+		return 27;
+	}
+	else if(valor < 29000){
+		return 28;
+	}
+	else if(valor < 30000){
+		return 29;
+	}
+	else{
+		return 30;
+	}
+}
 
+//Logica encargada de encender led LLAMAR EN BUCLE MAIN
+void encender_led(){
+	uint16_t valor = tabla_conversion();
+	if(valor < 15){
+		GPIO_ClearValue(PINSEL_PORT_0, 1<<0); //apago P0.1
+		GPIO_SetValue(PINSEL_PORT_0, 0<<0);	  //prendo P0.0 
+	}
+	else{
+		GPIO_ClearValue(PINSEL_PORT_0, 0<<0); //apago P0.1
+		GPIO_SetValue(PINSEL_PORT_0, 1<<0); //Prendo P0.1                     
+	}
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+//Transmision UART
+void transmitir_UART(){
+	UART_Send(LPC_UART0, BUFFER_DATOS_ADC, 30, BLOCKING);
+}
