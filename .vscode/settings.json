@@ -1,0 +1,12 @@
+{
+    "files.associations": {
+        "lpc17xx_dac.h": "c",
+        "lpc17xx_adc.h": "c",
+        "lpc17xx_pinsel.h": "c",
+        "lpc17xx_gpdma.h": "c",
+        "lpc17xx_timer.h": "c",
+        "lpc17xx_exti.h": "c",
+        "lpc17xx_gpio.h": "c",
+        "lpc17xx_uart.h": "c"
+    }
+}
