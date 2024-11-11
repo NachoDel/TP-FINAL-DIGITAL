@@ -13,6 +13,7 @@
 Uint16_t ADC_CLKDIV = 1000; //selector de rate para el adc
 Uint32_t PRESCALE   =   399; //prescaler para 1ms
 Uint32_t BUFFER_DATOS_ADC[30]; //Para solicitar estos datos, deben ser tratados
+Uint16_t BUFFER_ENVIAR[30]; //Para solicitar estos datos, deben ser tratados
 Uint32_t MATCH0_VALUE = 500; //0,5 segundos
 
 //-------- FUNCIONES --------//
@@ -89,7 +90,7 @@ void config_DMA(){
 	GPDMA_Setup(&dma_cfg)
 	// ----- UART ------//
 	dma_cfg.ChannelNum          = 1;    
-	dma_cfg.SrcMemAddr          = (Uint32_t) &BUFFER_DATOS_ADC;
+	dma_cfg.SrcMemAddr          = (Uint32_t) &BUFFER_ENVIAR;
 	dma_cfg.DstMemAddr          = 0;
 	dma_cfg.TransferSize        = 16;
 	dma_cfg.TransferWidth       = 0;
@@ -110,6 +111,7 @@ void config_DMA(){
 	dma_cfg.DMALLI       	    = 0;
 	GPDMA_Setup(&dma_cfg)
 
+	NVIC_EnableIRQ(DMA_IRQn);
 }
 void config_UART(){
 	UART_CFG_Type uart_cfg;
@@ -160,7 +162,25 @@ void ADC_IRQHandler(){
 	LPC_ADC->INTEN = 0;
 	ADC_ChannelCmd(LPC_ADC, ADC_CHANNEL_0, DISABLE);
 }
+void DMA_IRQHandler(){
+	//Canal 0 -> termino de mandar los 30 datos del ADC al buffer
+	if(GPDMA_IntGetStatus(GPDMA_STAT_INTTC,0)){
+		GPDMA_ChannelCmd(0, DISABLE);
+		GPDMA_ClearIntPending(GPDMA_STATCLR_INTTC,0);
+	
+		convertir_datos_ADC(); //Una vez que se termino de cargar el buffer de ADC, se convierten los datos
+	
+		GPDMA_ChannelCmd(1, ENABLE);
+	}
+	else if(GPDMA_IntGetStatus(GPDMA_STAT_INTTC,1)){ //si ya termino de mandar todos los datos al UART, apago el canal del DMA
+			GPDMA_ChannelCmd(1, DISABLE);
+			GPDMA_ClearIntPending(GPDMA_STATCLR_INTTC,1);
+	}
+	else{
+		GPDMA_ClearIntPending(GPDMA_STATCLR_INTTC,2);
+	}
 
+}
 // ----- FUNCIONES VARIAS -----//	
 //Funcion encargada de extraer los 12 bits con el resultado de la conversion
 //desde el buffer, indice "pos"
@@ -267,8 +287,7 @@ uint16_t tabla_conversion(uint16_t valor){ //SE DEBE VER COMO ES LA CONVERSION D
 }
 
 //Logica encargada de encender led LLAMAR EN BUCLE MAIN
-void encender_led(){
-	uint16_t valor = tabla_conversion();
+void encender_led(uint16_t valor){
 	if(valor < 15){
 		GPIO_ClearValue(PINSEL_PORT_0, 1<<0); //apago P0.1
 		GPIO_SetValue(PINSEL_PORT_0, 0<<0);	  //prendo P0.0 
@@ -279,7 +298,15 @@ void encender_led(){
 	}
 }
 
-//Transmision UART
-void transmitir_UART(){
-	UART_Send(LPC_UART0, BUFFER_DATOS_ADC, 30, BLOCKING);
+//Funcion encargada de tomar los datos del buffer_ADC, transofrmarlos en datos de la tabla, y guardarlos en BUFFER_ENVIAR
+void convertir_datos_ADC(){
+	for(uint8_t i = 0; i < 30; i++){
+		BUFFER_ENVIAR[i] = tabla_conversion(extract_ADC_result_from_Buffer(i));
+	}
 }
+
+//Transmision UART
+//CREO QUE ESTO NO HACE FALTA, YA QUE EL DMA SE ENCARGA DE ESTO (enviar datos al UART)
+// void transmitir_UART(){
+// 	UART_Send(LPC_UART0, BUFFER_ENVIAR, 30, BLOCKING);
+// } VER CHAT GPT
